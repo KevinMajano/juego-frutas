@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego: !Dale la fruta a quien la pidaaa! </title>
+    <!-- Incluye Tailwind CSS para estilos modernos y responsivos -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Define una fuente agradable */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f3e9; /* Fondo de tierra clara */
+        }
+        /* Estilos específicos del juego */
+        .game-container {
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #87ceeb 0%, #6495ed 50%, #b8d29b 100%); /* Cielo y tierra */
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            height: 80vh; /* Altura responsiva */
+            max-height: 700px;
+            width: 90vw; /* Ancho responsivo */
+            max-width: 600px;
+            margin: 20px auto;
+        }
+        /* Estilo para las frutas que caen */
+        .fruit {
+            position: absolute;
+            top: -50px; /* Comienzan fuera de la pantalla */
+            width: 40px;
+            height: 40px;
+            font-size: 30px;
+            line-height: 40px;
+            text-align: center;
+            border-radius: 50%;
+            pointer-events: none; /* No deben interferir con el clic del ratón */
+            transition: transform 0.05s linear; /* Para una caída más suave si se necesita */
+        }
+        /* Contenedor del jugador y la burbuja de diálogo */
+        #player-container {
+            position: absolute;
+            bottom: 20px;
+            /* Usamos left en el JS para mover este contenedor */
+            left: 50%; 
+            transform: translateX(-50%);
+            width: 80px; /* Ancho del jugador */
+            height: 120px; /* Espacio para el jugador + burbuja */
+            transition: left 0.1s linear;
+            user-select: none;
+        }
+
+        /* Estilo para el personaje recolector (la imagen) */
+        .player {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 80px;
+            height: 80px;
+            /* Cambiado de 50% a 8px para hacerlo cuadrado con esquinas redondeadas */
+            border-radius: 8px; 
+            cursor: grab; /* Indica que es arrastrable */
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.5);
+            object-fit: cover; /* Asegura que la imagen se ajuste y cubra el contenedor */
+        }
+
+        /* Estilo para la burbuja de diálogo */
+        .speech-bubble {
+            position: absolute;
+            top: -20px; /* Posicionado sobre el jugador */
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #fff;
+            color: #333;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: bold;
+            white-space: nowrap;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            /* Triángulo de la burbuja */
+            z-index: 20; 
+        }
+        .speech-bubble::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 5px solid #fff;
+            transform: translateX(-50%);
+        }
+
+        .modal {
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+            z-index: 100;
+        }
+    </style>
+</head>
+<body class="p-4 sm:p-8 flex flex-col items-center justify-center min-h-screen">
+
+    <h1 class="text-3xl font-bold mb-4 text-gray-800">!Dale la fruta a quien la pida!</h1>
+
+    <!-- Contenedor principal del juego -->
+    <div id="gameContainer" class="game-container">
+
+        <!-- Marcadores en la parte superior -->
+        <div class="absolute top-4 left-4 right-4 flex justify-between p-2 bg-white/70 rounded-lg shadow-md z-10">
+            <div class="text-lg font-semibold text-gray-700">Puntaje: <span id="score">0</span></div>
+            <div class="text-lg font-semibold text-gray-700">Tiempo: <span id="timer">30</span>s</div>
+        </div>
+
+        <!-- Contenedor del Personaje y la Burbuja -->
+        <div id="player-container">
+             <!-- Burbuja de diálogo -->
+            <div class="speech-bubble">¡Quiero Fruta!</div>
+            <!-- Personaje recolector (Michelle) -->
+            <img id="player" class="player" src="michelle.png" alt="Personaje Recolector Michelle">
+        </div>
+
+        <!-- Modal de Inicio/Fin de Juego -->
+        <div id="gameModal" class="modal fixed inset-0 flex items-center justify-center hidden">
+            <div id="modalContent" class="bg-white p-8 rounded-xl shadow-2xl text-center max-w-sm w-full transition-transform transform scale-100">
+                <h2 id="modalTitle" class="text-3xl font-bold mb-4 text-indigo-600"></h2>
+                <p id="modalMessage" class="text-lg text-gray-600 mb-6"></p>
+                <button id="startButton" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-full transition duration-300 shadow-lg active:scale-95">Comenzar Juego</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mensaje de controles -->
+    <p class="mt-4 text-sm text-gray-600">
+        Controla al personaje con las flechas <span class="font-bold text-gray-800">←</span> y <span class="font-bold text-gray-800">→</span> del teclado o <span class="font-bold text-gray-800">arrastrándolo</span> con el ratón/táctil.
+    </p>
+
+    <script>
+        // --- Constantes del Juego ---
+        const GAME_DURATION = 30; // Duración del juego en segundos
+        const FRUIT_TYPES = [
+            { emoji: '🍓', points: 1 }, // Fresa
+            { emoji: '🍇', points: 1 }, // Uva
+            { emoji: '🍈', points: 1 }  // Melón
+        ];
+        const PLAYER_SPEED = 15; // Velocidad de movimiento del jugador
+        const FRUIT_FALL_SPEED = 2; // Velocidad de caída base de las frutas
+
+        // --- Elementos del DOM ---
+        const gameContainer = document.getElementById('gameContainer');
+        const playerContainer = document.getElementById('player-container'); // Referencia al nuevo contenedor
+        const player = document.getElementById('player');
+        const scoreElement = document.getElementById('score');
+        const timerElement = document.getElementById('timer');
+        const gameModal = document.getElementById('gameModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalMessage = document.getElementById('modalMessage');
+        const startButton = document.getElementById('startButton');
+
+        // --- Estado del Juego ---
+        let score = 0;
+        let timeLeft = GAME_DURATION;
+        let isGameRunning = false;
+        let gameLoopId;
+        let fruitSpawnIntervalId;
+        let timerIntervalId;
+        // playerX ahora representa la posición del contenedor
+        let playerX = gameContainer.offsetWidth / 2 - playerContainer.offsetWidth / 2; 
+        let isDragging = false;
+        let lastTouchX = 0; // Para el movimiento táctil
+
+        // --- Dimensiones del Juego ---
+        let containerWidth = gameContainer.offsetWidth;
+        let playerWidth = playerContainer.offsetWidth;
+
+        // --- Funciones del Juego ---
+
+        // Muestra la pantalla de inicio o fin
+        function showModal(title, message, isGameOver) {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            startButton.textContent = isGameOver ? 'Jugar de Nuevo' : 'Comenzar Juego';
+            gameModal.classList.remove('hidden');
+        }
+
+        // Oculta el modal y reinicia el estado
+        function hideModal() {
+            gameModal.classList.add('hidden');
+        }
+
+        // Inicializa o reinicia el juego
+        function startGame() {
+            // Limpiar estados anteriores
+            clearInterval(fruitSpawnIntervalId);
+            clearInterval(timerIntervalId);
+            cancelAnimationFrame(gameLoopId);
+            gameContainer.querySelectorAll('.fruit').forEach(fruit => fruit.remove());
+
+            // Resetear estado
+            score = 0;
+            timeLeft = GAME_DURATION;
+            isGameRunning = true;
+
+            // Actualizar UI
+            scoreElement.textContent = score;
+            timerElement.textContent = timeLeft;
+            hideModal();
+
+            // Posicionar jugador al centro
+            playerX = (gameContainer.offsetWidth - playerContainer.offsetWidth) / 2;
+            playerContainer.style.left = playerX + 'px';
+
+            // Iniciar bucles
+            timerIntervalId = setInterval(updateTimer, 1000);
+            fruitSpawnIntervalId = setInterval(spawnFruit, 800); // Generar fruta cada 0.8s
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        // Termina el juego
+        function endGame() {
+            isGameRunning = false;
+            clearInterval(fruitSpawnIntervalId);
+            clearInterval(timerIntervalId);
+            cancelAnimationFrame(gameLoopId);
+
+            showModal(
+                '¡Tiempo Agotado!',
+                `¡Tu puntaje final es: ${score} frutas artadas!`,
+                true
+            );
+        }
+
+        // Actualiza el temporizador y verifica el fin del juego
+        function updateTimer() {
+            timeLeft--;
+            timerElement.textContent = timeLeft;
+            if (timeLeft <= 0) {
+                endGame();
+            }
+        }
+
+        // Crea una nueva fruta
+        function spawnFruit() {
+            if (!isGameRunning) return;
+
+            // Elegir fruta al azar
+            const fruitData = FRUIT_TYPES[Math.floor(Math.random() * FRUIT_TYPES.length)];
+
+            // Crear el elemento HTML
+            const fruit = document.createElement('div');
+            fruit.className = 'fruit';
+            fruit.textContent = fruitData.emoji;
+            fruit.dataset.score = fruitData.points;
+            fruit.dataset.speed = FRUIT_FALL_SPEED + Math.random() * 1.5; // Velocidad un poco aleatoria
+
+            // Posición X aleatoria (asegurando que quepa dentro del contenedor)
+            const fruitSize = 40;
+            const maxX = gameContainer.offsetWidth - fruitSize;
+            const startX = Math.random() * maxX;
+            fruit.style.left = startX + 'px';
+
+            gameContainer.appendChild(fruit);
+        }
+
+        // Actualiza la posición del jugador
+        function updatePlayerPosition(direction) {
+            if (!isGameRunning) return;
+
+            let newX = playerX;
+
+            if (direction === 'left') {
+                newX -= PLAYER_SPEED;
+            } else if (direction === 'right') {
+                newX += PLAYER_SPEED;
+            }
+
+            // Limitar el movimiento dentro del contenedor
+            newX = Math.max(0, Math.min(newX, containerWidth - playerWidth));
+
+            playerX = newX;
+            playerContainer.style.left = playerX + 'px'; // Mover el contenedor
+        }
+
+        // Manejador del bucle principal del juego
+        function gameLoop() {
+            if (!isGameRunning) return;
+
+            const fruits = gameContainer.querySelectorAll('.fruit');
+            // Usamos playerContainer para calcular la posición de colisión
+            const playerRect = playerContainer.getBoundingClientRect(); 
+            const containerRect = gameContainer.getBoundingClientRect();
+
+            fruits.forEach(fruit => {
+                let fruitY = parseFloat(fruit.style.top || -50);
+                const fallSpeed = parseFloat(fruit.dataset.speed);
+
+                // 1. Mover la fruta
+                fruitY += fallSpeed;
+                fruit.style.top = fruitY + 'px';
+
+                // 2. Comprobar colisión
+                const fruitRect = fruit.getBoundingClientRect();
+
+                // Colisión si las rectángulos se superponen
+                if (
+                    fruitRect.bottom > playerRect.top &&
+                    fruitRect.top < playerRect.bottom &&
+                    fruitRect.right > playerRect.left &&
+                    fruitRect.left < playerRect.right
+                ) {
+                    // Colisión detectada: Aumentar puntaje
+                    score += parseInt(fruit.dataset.score);
+                    scoreElement.textContent = score;
+                    fruit.remove(); // Eliminar la fruta
+                }
+
+                // 3. Comprobar si la fruta se salió por la parte inferior
+                if (fruitY > gameContainer.offsetHeight) {
+                    fruit.remove(); // Eliminar la fruta perdida
+                }
+            });
+
+            // Llamar al siguiente frame
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- Manejo de Eventos ---
+
+        // 1. Controles del Teclado
+        document.addEventListener('keydown', (e) => {
+            if (!isGameRunning) return;
+            if (e.key === 'ArrowLeft') {
+                updatePlayerPosition('left');
+            } else if (e.key === 'ArrowRight') {
+                updatePlayerPosition('right');
+            }
+        });
+
+        // 2. Controles de Arrastre (Ratón y Táctil)
+
+        // Comienzo del arrastre (MouseDown o TouchStart)
+        function startDrag(e) {
+            if (!isGameRunning) return;
+            isDragging = true;
+            player.style.cursor = 'grabbing';
+            // Prevenir el arrastre nativo de la imagen
+            e.preventDefault();
+
+            // Para el modo táctil
+            if (e.touches) {
+                lastTouchX = e.touches[0].clientX;
+            }
+        }
+
+        // Movimiento durante el arrastre (MouseMove o TouchMove)
+        function duringDrag(e) {
+            if (!isDragging || !isGameRunning) return;
+
+            let clientX;
+            if (e.touches) { // Táctil
+                clientX = e.touches[0].clientX;
+                // Calcular el desplazamiento relativo
+                const deltaX = clientX - lastTouchX;
+                // Mover el jugador en base al desplazamiento
+                let newX = playerX + deltaX;
+
+                // Limitar el movimiento
+                newX = Math.max(0, Math.min(newX, containerWidth - playerWidth));
+
+                playerX = newX;
+                playerContainer.style.left = playerX + 'px'; // Mover el contenedor
+
+                lastTouchX = clientX; // Actualizar la última posición táctil
+            } else { // Ratón
+                clientX = e.clientX;
+                const containerRect = gameContainer.getBoundingClientRect();
+                const newPlayerCenter = clientX - containerRect.left;
+                let newX = newPlayerCenter - playerWidth / 2;
+
+                // Limitar el movimiento
+                newX = Math.max(0, Math.min(newX, containerWidth - playerWidth));
+
+                playerX = newX;
+                playerContainer.style.left = newX + 'px'; // Mover el contenedor
+            }
+        }
+
+        // Fin del arrastre (MouseUp o TouchEnd)
+        function endDrag() {
+            if (!isGameRunning) return;
+            isDragging = false;
+            player.style.cursor = 'grab';
+        }
+
+        // Añadir listeners para ratón (el arrastre ahora se inicia en la imagen del jugador)
+        player.addEventListener('mousedown', startDrag);
+        document.addEventListener('mousemove', duringDrag);
+        document.addEventListener('mouseup', endDrag);
+
+        // Añadir listeners para táctil
+        player.addEventListener('touchstart', startDrag);
+        document.addEventListener('touchmove', duringDrag);
+        document.addEventListener('touchend', endDrag);
+
+        // 3. Botón de Inicio
+        startButton.addEventListener('click', startGame);
+
+        // 4. Manejo de redimensionamiento para responsividad
+        window.addEventListener('resize', () => {
+            containerWidth = gameContainer.offsetWidth;
+            // Reposicionar el jugador si es necesario
+            playerX = Math.max(0, Math.min(playerX, containerWidth - playerWidth));
+            playerContainer.style.left = playerX + 'px';
+        });
+
+        // 5. Inicialización
+        window.onload = function() {
+            // Recalcular dimensiones al inicio
+            containerWidth = gameContainer.offsetWidth;
+            playerWidth = playerContainer.offsetWidth;
+
+            // Mostrar la pantalla de inicio
+            showModal(
+                '¡Bienvenida, catadora de frutas!',
+                'Tienes 30 segundos para comer la mayor cantidad de frutas. ¡Mucha suerte!',
+                false
+            );
+        };
+
+    </script>
+</body>
+</html>
