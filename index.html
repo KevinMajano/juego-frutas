@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Juego: !Dale la fruta a quien la pidaaa! </title>
+    <title>Juego: ¡Dale la fruta a quien la pida!</title>
     <!-- Incluye Tailwind CSS para estilos modernos y responsivos -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -105,7 +105,7 @@
 </head>
 <body class="p-4 sm:p-8 flex flex-col items-center justify-center min-h-screen">
 
-    <h1 class="text-3xl font-bold mb-4 text-gray-800">!Dale la fruta a quien la pida!</h1>
+    <h1 class="text-3xl font-bold mb-4 text-gray-800">¡Dale la fruta a quien la pida!</h1>
 
     <!-- Contenedor principal del juego -->
     <div id="gameContainer" class="game-container">
@@ -113,6 +113,8 @@
         <!-- Marcadores en la parte superior -->
         <div class="absolute top-4 left-4 right-4 flex justify-between p-2 bg-white/70 rounded-lg shadow-md z-10">
             <div class="text-lg font-semibold text-gray-700">Puntaje: <span id="score">0</span></div>
+            <!-- Nuevo marcador de vidas -->
+            <div class="text-lg font-semibold text-gray-700">Vidas: <span id="lives">3</span></div> 
             <div class="text-lg font-semibold text-gray-700">Tiempo: <span id="timer">30</span>s</div>
         </div>
 
@@ -142,19 +144,24 @@
     <script>
         // --- Constantes del Juego ---
         const GAME_DURATION = 30; // Duración del juego en segundos
+        const INITIAL_LIVES = 3; // Vidas iniciales del personaje
+        // Aumentada la velocidad de caída de 2 a 2.5
+        const FRUIT_FALL_SPEED = 2.5; 
         const FRUIT_TYPES = [
             { emoji: '🍓', points: 1 }, // Fresa
             { emoji: '🍇', points: 1 }, // Uva
-            { emoji: '🍈', points: 1 }  // Melón
+            { emoji: '🍈', points: 1 },  // Melón
+            // Nuevo item: Camarón, resta 5 puntos y quita una vida
+            { emoji: '🍤', points: -5 }  
         ];
         const PLAYER_SPEED = 15; // Velocidad de movimiento del jugador
-        const FRUIT_FALL_SPEED = 2; // Velocidad de caída base de las frutas
 
         // --- Elementos del DOM ---
         const gameContainer = document.getElementById('gameContainer');
-        const playerContainer = document.getElementById('player-container'); // Referencia al nuevo contenedor
+        const playerContainer = document.getElementById('player-container');
         const player = document.getElementById('player');
         const scoreElement = document.getElementById('score');
+        const livesElement = document.getElementById('lives'); // Elemento de vidas
         const timerElement = document.getElementById('timer');
         const gameModal = document.getElementById('gameModal');
         const modalTitle = document.getElementById('modalTitle');
@@ -163,12 +170,12 @@
 
         // --- Estado del Juego ---
         let score = 0;
+        let lives = INITIAL_LIVES; // Estado de vidas
         let timeLeft = GAME_DURATION;
         let isGameRunning = false;
         let gameLoopId;
         let fruitSpawnIntervalId;
         let timerIntervalId;
-        // playerX ahora representa la posición del contenedor
         let playerX = gameContainer.offsetWidth / 2 - playerContainer.offsetWidth / 2; 
         let isDragging = false;
         let lastTouchX = 0; // Para el movimiento táctil
@@ -192,6 +199,11 @@
             gameModal.classList.add('hidden');
         }
 
+        // Actualiza el contador de vidas en el DOM
+        function updateLivesDisplay() {
+            livesElement.textContent = lives;
+        }
+
         // Inicializa o reinicia el juego
         function startGame() {
             // Limpiar estados anteriores
@@ -202,11 +214,13 @@
 
             // Resetear estado
             score = 0;
+            lives = INITIAL_LIVES; // Resetear vidas
             timeLeft = GAME_DURATION;
             isGameRunning = true;
 
             // Actualizar UI
             scoreElement.textContent = score;
+            updateLivesDisplay(); // Actualizar el display de vidas
             timerElement.textContent = timeLeft;
             hideModal();
 
@@ -221,15 +235,25 @@
         }
 
         // Termina el juego
-        function endGame() {
+        function endGame(reason) {
             isGameRunning = false;
             clearInterval(fruitSpawnIntervalId);
             clearInterval(timerIntervalId);
             cancelAnimationFrame(gameLoopId);
 
+            let title, message;
+
+            if (reason === 'lives') {
+                title = '¡Vidas Agotadas!';
+                message = `¡Oh no, has perdido todas tus vidas Michelle no soporto tanto camaron! Tu puntaje final es: ${score}.`;
+            } else { // reason === 'time'
+                title = '¡Tiempo Agotado!';
+                message = `¡Tu puntaje final es: ${score} frutas artadas!`;
+            }
+
             showModal(
-                '¡Tiempo Agotado!',
-                `¡Tu puntaje final es: ${score} frutas artadas!`,
+                title,
+                message,
                 true
             );
         }
@@ -239,7 +263,7 @@
             timeLeft--;
             timerElement.textContent = timeLeft;
             if (timeLeft <= 0) {
-                endGame();
+                endGame('time'); // Finaliza por tiempo
             }
         }
 
@@ -247,7 +271,7 @@
         function spawnFruit() {
             if (!isGameRunning) return;
 
-            // Elegir fruta al azar
+            // Elegir fruta o camarón al azar
             const fruitData = FRUIT_TYPES[Math.floor(Math.random() * FRUIT_TYPES.length)];
 
             // Crear el elemento HTML
@@ -255,7 +279,8 @@
             fruit.className = 'fruit';
             fruit.textContent = fruitData.emoji;
             fruit.dataset.score = fruitData.points;
-            fruit.dataset.speed = FRUIT_FALL_SPEED + Math.random() * 1.5; // Velocidad un poco aleatoria
+            // Se usa FRUIT_FALL_SPEED (2.5) como base + un valor aleatorio.
+            fruit.dataset.speed = FRUIT_FALL_SPEED + Math.random() * 1.5; 
 
             // Posición X aleatoria (asegurando que quepa dentro del contenedor)
             const fruitSize = 40;
@@ -312,10 +337,57 @@
                     fruitRect.right > playerRect.left &&
                     fruitRect.left < playerRect.right
                 ) {
-                    // Colisión detectada: Aumentar puntaje
-                    score += parseInt(fruit.dataset.score);
+                    // Colisión detectada: 
+                    const points = parseInt(fruit.dataset.score);
+                    score += points;
                     scoreElement.textContent = score;
+
+                    // Lógica de pérdida de vida si se atrapa un camarón (puntos < 0)
+                    if (points < 0) {
+                        lives--;
+                        updateLivesDisplay();
+                    }
+
+                    // Mostrar una breve animación de puntaje
+                    const feedback = document.createElement('div');
+                    feedback.textContent = points > 0 ? `+${points}` : `${points}`;
+                    feedback.style.cssText = `
+                        position: absolute;
+                        top: ${fruitRect.top - containerRect.top}px;
+                        left: ${fruitRect.left - containerRect.left}px;
+                        font-weight: bold;
+                        color: ${points > 0 ? '#4CAF50' : '#F44336'};
+                        font-size: 18px;
+                        pointer-events: none;
+                        animation: floatUp 1s forwards;
+                    `;
+                    gameContainer.appendChild(feedback);
+
+                    // Definir la animación (CSS inline para ser autocontenido)
+                    if (!document.getElementById('floatUpStyle')) {
+                        const style = document.createElement('style');
+                        style.id = 'floatUpStyle';
+                        style.textContent = `
+                            @keyframes floatUp {
+                                to {
+                                    transform: translateY(-20px);
+                                    opacity: 0;
+                                }
+                            }
+                        `;
+                        document.head.appendChild(style);
+                    }
+
+                    // Eliminar el feedback después de la animación
+                    setTimeout(() => feedback.remove(), 1000);
+
                     fruit.remove(); // Eliminar la fruta
+
+                    // Verificar condición de Game Over por vidas
+                    if (lives <= 0) {
+                        endGame('lives');
+                        return; // Detiene el bucle si el juego termina
+                    }
                 }
 
                 // 3. Comprobar si la fruta se salió por la parte inferior
@@ -425,8 +497,8 @@
 
             // Mostrar la pantalla de inicio
             showModal(
-                '¡Bienvenida, catadora de frutas!',
-                'Tienes 30 segundos para comer la mayor cantidad de frutas. ¡Mucha suerte!',
+                '¡Bienvenida, Catadora de futas!',
+                'Tienes 30 segundos y 3 vidas. ¡Cuidado con los camarones 🍤, te quitan vida y puntos!',
                 false
             );
         };
